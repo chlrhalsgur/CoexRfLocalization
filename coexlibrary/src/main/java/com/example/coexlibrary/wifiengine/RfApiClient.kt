@@ -58,6 +58,7 @@ class RfApiClient {
 
             val status = jsonResponse.optString("status").toInt()
 //            val rfLocalizationResult = jsonResponse.optString("rf_localization_result")
+            Log.d("network", "request failed dfdf")
 
             val rfLocalizationResult = jsonArrayToDoubleArrayList(jsonResponse.getJSONArray("rf_localization_result"))
             val weightAverage = jsonArrayToDoubleArrayList(jsonResponse.getJSONArray("weighted_average"))

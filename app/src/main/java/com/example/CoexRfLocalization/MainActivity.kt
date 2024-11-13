@@ -1,6 +1,7 @@
 package com.example.CoexRfLocalization
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,11 +12,13 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.net.wifi.WifiManager
+import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Vibrator
+import android.provider.Settings
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -23,6 +26,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Switch
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import com.example.coexRfLocalization.R
 import com.example.coexlibrary.ExIndoorLocalization
@@ -31,9 +35,12 @@ import com.kircherelectronics.fsensor.observer.SensorSubject
 import com.kircherelectronics.fsensor.sensor.FSensor
 import com.kircherelectronics.fsensor.sensor.gyroscope.GyroscopeSensor
 import kotlinx.coroutines.*
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
+    private var mac = ""
     private var curFloor = -2.0
     private val mSensorManager by lazy {
         getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -78,15 +85,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private val HTML_FILE : String = when(viewMode){
         "2D" -> "file:///android_asset/코엑스몰.html"
         "3D" -> "http:163.152.52.60:8001/coex/"
-        else -> "http:163.152.52.60:8001/coex/"
+        else -> "http://127.0.0.1:8001/"
     }
 //    private val HTML_FILE = "http:163.152.52.60:8001/coex/"
 
     /* 윤승용 사용자 좌표 DB 저장 + 위험구역 확인 */
     private var responseDataArea : ResponseDataArea? = ResponseDataArea(type = "walk", order = -1)
 
+    @SuppressLint("HardwareIds")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        mac = Settings.Secure.getString(this.contentResolver, Settings.Secure.ANDROID_ID)
         setContentView(R.layout.activity_main)
 
         checkPermission()
@@ -122,13 +131,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onSensorChanged(event: SensorEvent?) {
         if (event != null) {
             resultPosition = exIndoorLocalization.sensorChanged(event, fusedOrientation)
+            val resultPosition2 = exIndoorLocalization.outLiered
             if (resultPosition != preResultPosition){
                 checkFloor(resultPosition[2])
                 try {
-                    printDotInWebView(resultPosition[0], resultPosition[1], true)  // 마지막 인자에 true가 들어가야합니다.
+//                    printDotInWebView(resultPosition[0], resultPosition[1], true)  // 마지막 인자에 true가 들어가야합니다.
+                    printDotInWebView(resultPosition2[0], resultPosition2[1], true)  // 마지막 인자에 true가 들어가야합니다.
                 }catch (e:Exception){}
                 preResultPosition = resultPosition
             }
@@ -137,18 +149,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 vibrator.vibrate(30)
                 lastStep_pdr = exIndoorLocalization.stepCount
 
-                Log.d("asdasdasd", resultPosition.toString())
                 // control server
 //                resultPosition = resultPosition.filterNotNull().toTypedArray()
                 if (resultPosition != null && resultPosition.size == 3 && resultPosition[0] != null && resultPosition[1] != null && resultPosition[2] != null) {
+                    val currentDateTime = LocalDateTime.now()
+                    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                    val formattedDateTime = currentDateTime.format(formatter)
                     try {
                         CoroutineScope(Dispatchers.IO).launch {
                             responseDataArea = DashBoard().sendDataPoint(
                                 RequestDataPoint(
-                                    -18,
+                                    mac,
                                     resultPosition[0]?.toInt() ?: -99,
                                     resultPosition[1]?.toInt() ?: -99,
-                                    -1
+                                    -1,
+                                    formattedDateTime.toString()
                                 )
                             )
                         }
@@ -163,15 +178,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     Log.d("resultPosition null", "error not resultPosition")
                 }
 
-                if(responseDataArea != null) {
-                    if (responseDataArea!!.type != "walk") {
-                        DashBoard().showToastArea(this@MainActivity,DashBoard().areaMsg(responseDataArea!!.type))
-                    }
-                    else {
-                        Log.d("responseDataArea null", "error not response")
-                    }
-                }
-
             }
         }
     }
@@ -179,6 +185,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun checkFloor(floor: Double) {
         if (curFloor != floor){
             val fileName = when (floor){
+//                -2.0 -> "COEX_B2F.png"
                 -1.0 -> "COEX_B1F.png"
                 1.0 -> "COEX_1F.png"
                 2.0 -> "COEX_2F.png"

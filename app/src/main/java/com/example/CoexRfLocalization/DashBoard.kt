@@ -16,37 +16,12 @@ import kotlinx.serialization.Serializable
 import java.net.SocketException
 
 
-private const val userPointURL = "http://163.152.52.60:8001/coex/"
+private const val userPointURL = "http://163.152.52.60:8001/"
 private var toast: Toast? = null
 
 
 
 class DashBoard {
-
-/*
-    object HttpClientFactory {
-        val client: HttpClient by lazy {
-            HttpClient {
-                install(JsonFeature) {
-                    serializer = KotlinxSerializer(Json {
-                        ignoreUnknownKeys = true
-                    })
-                }
-            }
-        }
-    }
-
-
-    suspend fun sendDataPoint(requestData: RequestDataPoint): ResponseDataArea {
-        val response: HttpResponse = HttpClientFactory.client.post(userPointURL) {
-            contentType(io.ktor.http.ContentType.Application.Json)
-            body = requestData
-        }
-
-        return response.receive()
-    }
-*/
-
 
     companion object {
         val client: HttpClient by lazy {
@@ -57,27 +32,16 @@ class DashBoard {
             }
         }
     }
-/*
-    suspend fun sendDataPoint2(requestData: RequestDataPoint): ResponseDataArea {
-        val response: HttpResponse = client.post("${userPointURL}user_point/") {
-            contentType(io.ktor.http.ContentType.Application.Json)
-            body = requestData
-        }
 
-        return response.receive()
-    }
-*/
 
-    suspend fun sendDataPoint(requestData: RequestDataPoint): ResponseDataArea? {
+    suspend fun sendDataPoints(requestData: RequestDataPoint): ResponseDataArea? {
         var attempt = 0
         while (attempt < 3) {
             try {
-                val response: HttpResponse = client.post("${userPointURL}user_point/") {
+                val response: HttpResponse = client.post("${userPointURL}/db/user_coordinate") {
                     contentType(io.ktor.http.ContentType.Application.Json)
                     body = requestData
                 }
-                // 응답이 성공적이면 receive()를 호출하고 반환
-                Log.d("asdjasdkjasdjk", "ss")
                 return response.receive()
             } catch (e: SocketException) {
                 Log.e("sendDataPoint error", "SocketException: ${e.message}")
@@ -93,36 +57,23 @@ class DashBoard {
         return null
     }
 
-
-
-
-
-    suspend fun sendDataPointDelete(requestData: RequestDataPointDelete): HttpResponse {
-        val response: HttpResponse = client.post("${userPointURL}user_point_del/") {
-            contentType(io.ktor.http.ContentType.Application.Json)
-            body = requestData
+    suspend fun sendDataPoint(requestData: RequestDataPoint): ResponseDataArea? {
+        var attempt = 0
+        while (attempt < 3) {
+            try {
+                val response: HttpResponse = client.post("${userPointURL}/db/user_coordinate") {
+                    contentType(io.ktor.http.ContentType.Application.Json)
+                    body = requestData
+                    Log.d("asdad", body.toString())
+                }
+                return response.receive()  // 응답이 성공적이면 데이터를 반환
+            } catch (e: Exception) {
+                Log.e("sendDataPoint error", "Exception: ${e.message}")
+                attempt++
+                delay(333)  // 333ms 대기 후 재시도
+            }
         }
-
-        return response.receive()
-    }
-
-
-    fun getAndroidId(context: Context): String {
-        return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-    }
-
-    fun areaMsg(type: String): String {
-        return when(type) {
-            "danger" -> "위험구역 입니다."
-            else -> "area error"
-        }
-    }
-
-
-    fun showToastArea(context: Context, msg: String) {
-        toast?.cancel()
-        toast = Toast.makeText(context, msg, Toast.LENGTH_SHORT)
-        toast?.show()
+        return null
     }
 
 
@@ -134,10 +85,11 @@ class DashBoard {
 // 데이터 클래스 정의
 @Serializable
 data class RequestDataPoint(
-    val user_seq : Int,
-    val x : Int,
-    val y : Int,
-    val floor : Int
+    val user_id : String,
+    val pos_x : Int,
+    val pos_y : Int,
+    val pos_z : Int,
+    val recorded_at : String
 )
 
 
