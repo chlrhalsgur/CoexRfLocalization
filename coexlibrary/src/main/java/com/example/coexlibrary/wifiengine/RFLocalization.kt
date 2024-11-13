@@ -34,6 +34,8 @@ import kotlin.math.sqrt
 
 val RSSITHRES = -75
 class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JSONObject) {
+    var compass = 0.0
+    var count = 0
     var coordArrayEMA: ArrayList<ArrayList<Double>>
     private var mapMatchingData: JSONObject
     private var isNetworkFailed = false
@@ -64,7 +66,7 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
     val coorsWithWeight = mutableListOf<CoordinateData>()
 
     private var dirOffset = -1.0
-    var rfCalliedGyro = 0.0f
+    var rfCalliedGyro = 0.0f // 앱 시작 시 0도일 때 얼마나 회전했는지 단위: 도
     var rfGyro = 0.0f
     var rfGyroPre = 0.0f
     var rfGyroDiff = 0.0f
@@ -169,6 +171,8 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
                 sendSsidRssi()
                 prewifiScanData = wifiScanData
                 dirOffset = getDirection(rfLocalizationCoor)
+
+                //dir off
                 dirOffset = 0.0
                 isFresh = true
             }else{
@@ -364,7 +368,15 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
     }
     private var walkingThres = 0.8
     private fun getDirection(rfLocalizationCoor: ArrayList<Double>): Double {
+        var j = if (rfGyro >180){
+            360-rfGyro
+        }else{
+            rfGyro
+        }
+        Log.d("rf gyro ", "${(j)}")
+
         var pathAngle = -1.0
+        count ++
         queueForDirection.add(rfLocalizationCoor)
         if (queueForDirection.size > queueForDirectionSize){
             var vectors = ArrayList<ArrayList<Double>>()
@@ -378,12 +390,13 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
             }
             rfGyroDiff = (rfGyroDiff%360.0).toFloat()
             rfGyroPre = rfCalliedGyro
-            Log.d("asdasdada y", rfGyroDiff.toString())
 
             // gyroscope 값이 틀어졌다면(직선으로 걷지 않으면) 큐 비우고 실행 중단
-            if (abs(rfGyroDiff) > straightParm){
+//            if (abs(rfGyroDiff) > straightParm){
+                if (false){
 //                queueForDirection.removeAt(0)
                 queueForDirection.clear()
+                Log.d("asdasdada queue clear", "clear".toString())
                 return dirOffset
             }
 
@@ -395,13 +408,13 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
             val vectorSimilarity = calculateVectorSimilarity(vectors)
 
 //            if (vectorSimilarity > walkingThres ){
-            if (vectorSimilarity > walkingThres ){
+//            if (vectorSimilarity > walkingThres ){
+                if (true){
                 val dirRadian = atan2(queueForDirection[queueForDirection.size-1][0] - queueForDirection[0][0], queueForDirection[queueForDirection.size-1][1] - queueForDirection[0][1])
                 pathAngle = (dirRadian * (180 / PI))
                 pathAngle = 360 - (pathAngle + 360)%360  // x, y 반대라서가 아니라 시계방향으로 각도 추정해서 360에서 빼는 것임
 
 
-                Log.d("asdasdada 에러", abs((pathAngle - rfCalliedGyro) - dirOffset).toString())
 
                 if (!dirConvergence){ //방향 수렴 전
                     var errorRate = 0.0
@@ -415,11 +428,16 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
                         errorRate = dirOffset - (gyroOffsetAvgSum/(gyroOffsetAvgCount+1))
                         dirOffset = gyroOffsetAvgSum/(++gyroOffsetAvgCount)
                     }
-                    Log.d("asdasdada 추정 각도와 차이", abs((pathAngle - rfCalliedGyro) - dirOffset).toString())
-                    Log.d("asdasdada 추정 calligyro", rfCalliedGyro.toString())
-                    Log.d("asdasdada 추정 error rate", errorRate.toString())
-                    Log.d("asdasdada 추정 fsetAvgSum", gyroOffsetAvgSum.toString())
-                    Log.d("asdasdada 추정 AvgCounte", gyroOffsetAvgCount.toString())
+                    Log.d("RF Direction",
+                        "count: ${count}" +
+                            "추정 각도와 차이: ${abs((pathAngle - rfCalliedGyro) - dirOffset)}," +
+                            "Error rate: ${errorRate}" +
+                            "gyro gyroOffsetAvgCount: ${gyroOffsetAvgCount}," +
+                            "gyro gyroOffsetAvgSum: ${gyroOffsetAvgSum}," +
+                            "나침반 방향: ${compass}," +
+                            "추정 초기 각도: ${dirOffset}," +
+                            "RF Gyro(0도방향): ${rfGyro}"
+                    )
 
                     if (errorRate < errRateParm){
                         convergenceDirection = dirOffset + rfCalliedGyro
@@ -542,34 +560,42 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
         var filteredData = rfFilter.filterCoor(rfLocalizationCoor, statusCode)
         coordArrayEMA = rfFilter.coordArrayEMA
         filteredData = rfFilter.femaFilter(filteredData["outputCoor"] as ArrayList<Double>, statusCode, dir, stepLength)
-
+        val outlierFilteredData = rfFilter.applyOutlierFilter(filteredData["outputCoordArray"] as ArrayList<ArrayList<Double>>)
         statusCode = filteredData["statusCode"] as Double
-
-        return mapOf("rfStatusCode" to statusCode, "rfCoor" to filteredData["outputCoor"] as ArrayList<Double>, "rfFiltered" to rfLocalizationCoor)
+        return mapOf("rfStatusCode" to statusCode, "rfCoor" to filteredData["outputCoor"] as ArrayList<Double>, "rfFiltered" to rfLocalizationCoor, "rfOutlier" to outlierFilteredData)
     }
     fun getterWifiData(): MutableMap<String, Int> { isGetRange = false; return wifiScanData }
     fun getRfFloor(): Map<String, Any> { isGetFloor = false; return mapOf("status" to statusFloor, "floor" to floor) }
     fun getRfRange(): Map<String, Serializable> { isGetRange = false; return mapOf("status" to statusRange, "range" to range) }
     fun getRfMap(): Map<String, Any?> { return mapOf("status" to statusRange, "mapData" to mapDataTemp) }
     fun getDirOffset(gyroCaliValue: Float ): Double {
-//        return if (dirOffset == -1.0){
-//            gyroCaliValue.toDouble()
-//        }else{
-//            dirOffset
-//        }
+        // dir on
+        return if (dirOffset == -1.0){ //방향 수렴 전에는 나침반 방향 표시
+            gyroCaliValue.toDouble()
+        }else{
+            dirOffset
+        }
+
+        // dir off
         return dirOffset
     }
 
+    // dirOffset: 0 -> 0도 맞추고 시작할 때
+    // dirOffset: 정북 -> 나침반 방향 (방향 수렴 전)
+    // dirOffset: 특정값 -> 방향 추정
     fun getRfDirection(fusedOrientation: FloatArray, gyroMagCaliValue: Float, gyro: Float): Float {
         rfCalliedGyro = ((gyro + gyroErrCaliValue + 360)%360).toFloat()
         rfGyro = gyro
+        // 수렴 전에는 나침반, 수렴 후에는 추정 방향에 대한 offset
         val dirOffset = getDirOffset(gyroMagCaliValue).toFloat()
-
-        rfCalliedGyro + dirOffset
+        compass = ((((Math.toDegrees(fusedOrientation[0].toDouble()).toFloat() + 360) % 360 ) + 360) % 360).toDouble()
 //        return (((Math.toDegrees(fusedOrientation[0].toDouble()).toFloat() + 360) % 360 - gyroMagCaliValue + dirOffset) + 360) % 360
 
+        // dir off
         dir = ((dirOffset + rfCalliedGyro) % 360).toDouble()
+        compass = ((dirOffset + rfCalliedGyro) % 360).toDouble()
         return dir.toFloat()
+
 //        return ((((rfCalliedGyro - gyroErrCaliValue + 360)%360 - gyroMagCaliValue + dirOffset) + 360) % 360).toFloat()
     }
 
@@ -618,9 +644,7 @@ class RFLocalization(uppercontext: Context, TESTBED: String, mapMatchingJson: JS
             }
         }
 
-        Log.d("asdasd", "현재 추정 좌표: $coor")
-        Log.d("asdasd", "맵매칭된 좌표: $closestPoint")
-        val matchingCoor = arrayListOf(closestPoint!![0], closestPoint[1], 0.0)
+        val matchingCoor = arrayListOf(closestPoint!![0], closestPoint[1], coor[2])
 //        val matchingCoor = arrayListOf(0.0,0.0,0.0)
         return matchingCoor
     }
