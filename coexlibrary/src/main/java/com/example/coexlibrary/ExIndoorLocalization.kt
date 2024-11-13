@@ -4,9 +4,9 @@ import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.util.Log
+import com.example.coexlibrary.sensors.MovingAverage
 import com.example.heropdr.HeroPDR
 import com.example.heropdr.PDR
-import com.example.coexlibrary.sensors.MovingAverage
 import com.example.mylibrary.RFLocalization
 import org.json.JSONObject
 import java.io.InputStream
@@ -19,7 +19,7 @@ private val TESTBED ="coex"
 class ExIndoorLocalization(context: Context) {
     private var coor = arrayListOf(0.0,0.0,0.0)
     var coor2 = arrayListOf(0.0,0.0,0.0)
-
+    var outLiered = arrayListOf(0.0,0.0,0.0)
     /* 자이로 관련 */
     private var gyroCaliValue = 0.0f
     var sampledYawAngle: Float = 0.0f
@@ -155,8 +155,9 @@ class ExIndoorLocalization(context: Context) {
                         }
                         rfLocalization.setNowCoor(coor)
                         matchingCoor = rfLocalization.mapMatching(coor)
-                        Log.d("aosjdasijd22", matchingCoor.toString())
                         coordArrayEMA = rfLocalization.coordArrayEMA
+                        outLiered = rfResult["rfOutlier"] as ArrayList<Double>
+                        Log.d("asdasdasd 22", rfStatusCode.toString())
                     }
                 }
             }
